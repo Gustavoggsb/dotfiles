@@ -16,10 +16,10 @@ function is_wsl() {
   fi
 }
 
-function is_remote_containers() {
-  # This is the way to go until we have something better
-  # See: https://github.com/microsoft/vscode-dev-containers/issues/491
-  if [ -n "${VSCODE_REMOTE_CONTAINERS_SESSION+x}" ]; then
+function is_devcontainer() {
+  # VSCODE_REMOTE_CONTAINERS_SESSION:
+  # https://github.com/microsoft/vscode-remote-release/issues/3517#issuecomment-698617749
+  if [ -n "${REMOTE_CONTAINERS+x}" ] || [ -n "${CODESPACES+x}" ] || [ -n "${VSCODE_REMOTE_CONTAINERS_SESSION+x}" ]; then
     return 0
   else
     return 1
@@ -100,9 +100,19 @@ echo_task "Making zsh the default shell"
 sudo chsh -s "$(which zsh)" "$USER"
 
 echo_task "Initializing ZSH (with Antigen and Powerlevel10k)"
-zsh -is <<<'' 2>/dev/null
+(
+  # We need to be in a git repository, so gitstatusd initiliazes
+  script_dir="$( cd "$( dirname "${BASH_SOURCE[0]}" )" >/dev/null 2>&1 && pwd )"
+  cd "$script_dir"
+  # We also need to emulate a TTY
+  script -qec "zsh -is </dev/null" /dev/null
+)
+printf '\n\033[0;34m%s\033[0m\n' 'Info: You can safely ignore the weird output from the last command.'
 
-if ! is_remote_containers; then
+if ! is_devcontainer; then
+  echo_task "Installing deno"
+  sh -c "$(curl -fsSL https://deno.land/x/install/install.sh)"
+
   echo_task "Updating APT lists"
   sudo apt update
 
