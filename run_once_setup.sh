@@ -1,14 +1,16 @@
 #!/usr/bin/env bash
 
-function echo_task() {
+set -euo pipefail
+
+echo_task() {
   printf "\033[0;34m--> %s\033[0m\n" "$@"
 }
 
-function echo_sub_task() {
+echo_sub_task() {
   printf "\033[0;34m----> %s\033[0m\n" "$@"
 }
 
-function is_wsl() {
+is_wsl() {
   if [ -n "${WSL_DISTRO_NAME+x}" ] || [ -n "${IS_WSL+x}" ]; then
     return 0
   else
@@ -16,7 +18,7 @@ function is_wsl() {
   fi
 }
 
-function is_devcontainer() {
+is_devcontainer() {
   # VSCODE_REMOTE_CONTAINERS_SESSION:
   # https://github.com/microsoft/vscode-remote-release/issues/3517#issuecomment-698617749
   if [ -n "${REMOTE_CONTAINERS+x}" ] || [ -n "${CODESPACES+x}" ] || [ -n "${VSCODE_REMOTE_CONTAINERS_SESSION+x}" ]; then
@@ -26,7 +28,7 @@ function is_devcontainer() {
   fi
 }
 
-function is_ubuntu() {
+is_ubuntu() {
   local version=${1-'20.04'}
 
   if [[ "$(cat /etc/os-release)" = *VERSION_ID=\"$version\"* ]]; then
@@ -36,7 +38,7 @@ function is_ubuntu() {
   fi
 }
 
-function is_gnome() {
+is_gnome() {
   # This is not the best way of doing it, but at least it works inside the
   # Visual Studio Code integrated terminal, which is enough for me now.
   if [ "$(command -v gnome-shell)" ]; then
@@ -46,34 +48,45 @@ function is_gnome() {
   fi
 }
 
-function brew() {
+brew() {
   bash <<EOM
   if [ -f "/home/linuxbrew/.linuxbrew/bin/brew" ]; then
     eval "\$(/home/linuxbrew/.linuxbrew/bin/brew shellenv)"
   elif [ -f "\$HOME/.linuxbrew/bin/brew" ]; then
     eval "\$("\$HOME/.linuxbrew/bin/brew" shellenv)"
   else
-    echo "Homebrew is not installed." >&2
-    exit 1
+    echo "brew is not installed" >&2
+    exit 127
   fi
   brew $@
 EOM
 }
 
-function sdk() {
+nvm() {
   bash <<EOM
-  if [ -f "\$HOME/.sdkman/bin/sdkman-init.sh" ]; then
-    export SDKMAN_DIR="\$HOME/.sdkman"
-    . "\$HOME/.sdkman/bin/sdkman-init.sh"
+  export NVM_DIR="\$([ -z "\${XDG_CONFIG_HOME-}" ] && printf %s "\${HOME}/.nvm" || printf %s "\${XDG_CONFIG_HOME}/nvm")"
+  if [ -f "\$NVM_DIR/nvm.sh" ]; then
+    . "\$NVM_DIR/nvm.sh"
   else
-    echo "SDKMAN! is not installed." >&2
-    exit 1
+    echo "nvm is not installed" >&2
+    exit 127
+  fi
+  nvm $@
+EOM
+}
+
+sdk() {
+  bash <<EOM
+  export SDKMAN_DIR="\$HOME/.sdkman"
+  if [ -f "\$SDKMAN_DIR/bin/sdkman-init.sh" ]; then
+    . "\$SDKMAN_DIR/bin/sdkman-init.sh"
+  else
+    echo "sdk is not installed" >&2
+    exit 127
   fi
   sdk $@
 EOM
 }
-
-set -euo pipefail
 
 # See: https://github.com/microsoft/vscode-remote-release/issues/3531#issuecomment-675278804
 if [ -z "${USER+x}" ]; then
@@ -88,47 +101,48 @@ fi
 echo_task "Adding user to sudoers"
 echo "$USER  ALL=(ALL) NOPASSWD:ALL" | sudo tee "/etc/sudoers.d/$USER"
 
-echo_task "Installing ZSH"
+echo_task "Installing zsh"
 if ! zsh --version &>/dev/null; then
   sudo apt update
   sudo apt install -y zsh
 else
-  echo "ZSH already installed"
+  echo "zsh already installed"
 fi
 
 echo_task "Making zsh the default shell"
 sudo chsh -s "$(which zsh)" "$USER"
 
-echo_task "Initializing ZSH (with Antigen and Powerlevel10k)"
+echo_task "Initializing zsh"
 (
   # We need to be in a git repository, so gitstatusd initiliazes
-  script_dir="$( cd "$( dirname "${BASH_SOURCE[0]}" )" >/dev/null 2>&1 && pwd )"
+  script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" >/dev/null 2>&1 && pwd)"
   cd "$script_dir"
   # We also need to emulate a TTY
   script -qec "zsh -is </dev/null" /dev/null
 )
-printf '\n\033[0;34m%s\033[0m\n' 'Info: You can safely ignore the weird output from the last command.'
+echo "Done."
 
 if ! is_devcontainer; then
-  echo_task "Installing deno"
-  sh -c "$(curl -fsSL https://deno.land/x/install/install.sh)"
-
-  echo_task "Updating APT lists"
+  echo_task "Installing common packages"
   sudo apt update
+  sudo apt install -y software-properties-common build-essential curl wget tree parallel file zip
 
-  echo_task "Installing Homebrew"
+  echo_task "Installing git"
+  sudo add-apt-repository -y ppa:git-core/ppa
+  sudo apt install -y git
+
+  echo_task "Installing brew"
   if ! brew --version &>/dev/null; then
-    sudo apt install build-essential curl file -y
     CI=true bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/master/install.sh)"
   else
-    echo "Homebrew is already installed."
+    echo "brew is already installed"
   fi
 
-  echo_task "Installing Homebrew bundle"
+  echo_task "Installing brew packages"
   brew bundle install --global
 
   # Uninstalling previously installed chezmoi because it was already installed
-  # by brew.
+  # by Homebrew.
   local_bin_chezmoi="$HOME/.local/bin/chezmoi"
   if [ -f "$local_bin_chezmoi" ]; then
     echo_task "Uninstalling chezmoi at $local_bin_chezmoi"
@@ -136,20 +150,31 @@ if ! is_devcontainer; then
   fi
   unset local_bin_chezmoi
 
-  echo_task "Installing SDKMAN!"
+  echo_task "Installing deno"
+  if ! deno --version &>/dev/null; then
+    sh -c "$(curl -fsSL https://deno.land/x/install/install.sh)"
+  else
+    echo "deno is already installed"
+  fi
+
+  echo_task "Installing nvm"
+  PROFILE=/dev/null bash -c "$(curl -fsSL https://raw.githubusercontent.com/nvm-sh/nvm/master/install.sh)"
+
+  echo_task "Installing node"
+  nvm install 'lts/*' --latest-npm --reinstall-packages-from=current
+  nvm alias default 'lts/*'
+
+  echo_task "Installing sdk"
   if ! sdk version &>/dev/null; then
-    sudo apt install -y zip
     bash -c "$(curl -fsSL "https://get.sdkman.io/?rcupdate=false")"
   else
-    echo "SDKMAN! is already installed."
+    echo "sdk is already installed"
   fi
 
   echo_task "Installing Java 8"
   # get the identifier for java 8
   identifier="$(sdk ls java | grep -m 1 -o ' 8.*.hs-adpt ' | awk '{print $NF}')"
-  # ignore SDKMAN! error because often it's just already installed, at least
-  # until https://github.com/sdkman/sdkman-cli/pull/777 does not get merged.
-  sdk i java "$identifier" || true
+  sdk i java "$identifier"
   unset identifier
 
   if is_wsl; then
@@ -164,25 +189,26 @@ if ! is_devcontainer; then
       echo "No keys to sync"
     fi
     unset USERPROFILE
-  else
-    echo_task "Performing NOT WSL specific steps"
 
-    echo_task "Setting up Git credential helper to Gnome keyring"
-    sudo apt update
+    echo_task "Setting up Git credential helper"
+    sudo git config --system credential.helper "/mnt/c/Program\ Files/Git/mingw64/libexec/git-core/git-credential-manager.exe"
+  elif is_gnome; then
+    echo_task "Performing GNOME specific steps"
+
+    echo_task "Setting up Git credential helper"
     sudo apt install -y libsecret-1-0 libsecret-1-dev
     sudo make --directory /usr/share/doc/git/contrib/credential/libsecret
+    sudo git config --system credential.helper /usr/share/doc/git/contrib/credential/libsecret/git-credential-libsecret
 
-    if is_gnome; then
-      echo_task "Adding 'Open Code here' in Nautilus context menu"
-      bash -c "$(wget -qO- https://raw.githubusercontent.com/harry-cpp/code-nautilus/master/install.sh)"
+    echo_task "Adding 'Open Code here' in Nautilus context menu"
+    bash -c "$(wget -qO- https://raw.githubusercontent.com/harry-cpp/code-nautilus/master/install.sh)"
 
-      if is_ubuntu 20.04; then
-        echo_task "Setting up dark theme"
-        sudo apt install -y gnome-shell-extensions
-        gnome-extensions enable user-theme@gnome-shell-extensions.gcampax.github.com
-        gsettings set org.gnome.desktop.interface gtk-theme "Yaru-dark"
-        gsettings set org.gnome.shell.extensions.user-theme name "Yaru-dark"
-      fi
+    if is_ubuntu 20.04; then
+      echo_task "Setting up dark theme"
+      sudo apt install -y gnome-shell-extensions
+      gnome-extensions enable user-theme@gnome-shell-extensions.gcampax.github.com
+      gsettings set org.gnome.desktop.interface gtk-theme "Yaru-dark"
+      gsettings set org.gnome.shell.extensions.user-theme name "Yaru-dark"
     fi
   fi
 fi
