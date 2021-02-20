@@ -50,9 +50,9 @@ is_gnome() {
 
 brew() {
   bash <<EOM
-  if [ -f "/home/linuxbrew/.linuxbrew/bin/brew" ]; then
+  if [[ -f "/home/linuxbrew/.linuxbrew/bin/brew" ]]; then
     eval "\$(/home/linuxbrew/.linuxbrew/bin/brew shellenv)"
-  elif [ -f "\$HOME/.linuxbrew/bin/brew" ]; then
+  elif [[ -f "\$HOME/.linuxbrew/bin/brew" ]]; then
     eval "\$("\$HOME/.linuxbrew/bin/brew" shellenv)"
   else
     echo "brew is not installed" >&2
@@ -65,7 +65,7 @@ EOM
 nvm() {
   bash <<EOM
   export NVM_DIR="\$([ -z "\${XDG_CONFIG_HOME-}" ] && printf %s "\${HOME}/.nvm" || printf %s "\${XDG_CONFIG_HOME}/nvm")"
-  if [ -f "\$NVM_DIR/nvm.sh" ]; then
+  if [[ -f "\$NVM_DIR/nvm.sh" ]]; then
     . "\$NVM_DIR/nvm.sh"
   else
     echo "nvm is not installed" >&2
@@ -75,10 +75,23 @@ nvm() {
 EOM
 }
 
+volta() {
+  bash <<EOM
+  export VOLTA_HOME="\$HOME/.volta"
+  if [[ -f "\$VOLTA_HOME/bin/volta" ]]; then
+    export PATH="\$VOLTA_HOME/bin:\$PATH"
+  else
+    echo "volta is not installed" >&2
+    exit 127
+  fi
+  volta $@
+EOM
+}
+
 sdk() {
   bash <<EOM
   export SDKMAN_DIR="\$HOME/.sdkman"
-  if [ -f "\$SDKMAN_DIR/bin/sdkman-init.sh" ]; then
+  if [[ -f "\$SDKMAN_DIR/bin/sdkman-init.sh" ]]; then
     . "\$SDKMAN_DIR/bin/sdkman-init.sh"
   else
     echo "sdk is not installed" >&2
@@ -87,6 +100,8 @@ sdk() {
   sdk $@
 EOM
 }
+
+ran_apt_update=false
 
 # See: https://github.com/microsoft/vscode-remote-release/issues/3531#issuecomment-675278804
 if [ -z "${USER+x}" ]; then
@@ -104,6 +119,7 @@ echo "$USER  ALL=(ALL) NOPASSWD:ALL" | sudo tee "/etc/sudoers.d/$USER"
 echo_task "Installing zsh"
 if ! zsh --version &>/dev/null; then
   sudo apt update
+  ran_apt_update=true
   sudo apt install -y zsh
 else
   echo "zsh already installed"
@@ -124,12 +140,36 @@ echo "Done."
 
 if ! is_devcontainer; then
   echo_task "Installing common packages"
-  sudo apt update
+  if [[ "$ran_apt_update" == false ]]; then
+    sudo apt update
+  fi
   sudo apt install -y software-properties-common build-essential curl wget tree parallel file zip
 
+  echo_task "Adding apt repositories"
+  sudo add-apt-repository --no-update -y ppa:git-core/ppa
+  curl -fsSL "https://download.opensuse.org/repositories/devel:/kubic:/libcontainers:/stable/xUbuntu_$(lsb_release -sr)/Release.key" | sudo apt-key add -
+  sudo add-apt-repository -y "deb https://download.opensuse.org/repositories/devel:/kubic:/libcontainers:/stable/xUbuntu_$(lsb_release -sr)/ /"
+
   echo_task "Installing git"
-  sudo add-apt-repository -y ppa:git-core/ppa
   sudo apt install -y git
+
+  echo_task "Installing skopeo"
+  sudo apt install -y skopeo
+
+  # echo_task "Installing podman"
+  # sudo apt install -y podman
+  # if is_wsl; then
+  #   echo_sub_task "Setting up podman for WSL2"
+  #   if [[ ! -f "/etc/containers/containers.conf" ]]; then
+  #     sudo mkdir -p /etc/containers
+  #     sudo cp -f /usr/share/containers/containers.conf /etc/containers/containers.conf
+  #   fi
+  #   sudo sed -i "s/.*cgroup_manager.*=.*/cgroup_manager = \"cgroupfs\"/g" /etc/containers/containers.conf
+  #   sudo sed -i "s/.*events_logger.*=.*/events_logger = \"file\"/g" /etc/containers/containers.conf
+  # fi
+
+  # echo_task "Installing buildah"
+  # sudo apt install -y buildah
 
   echo_task "Installing brew"
   if ! brew --version &>/dev/null; then
@@ -157,12 +197,15 @@ if ! is_devcontainer; then
     echo "deno is already installed"
   fi
 
-  echo_task "Installing nvm"
-  PROFILE=/dev/null bash -c "$(curl -fsSL https://raw.githubusercontent.com/nvm-sh/nvm/master/install.sh)"
+  echo_task "Installing volta"
+  if ! volta --version &>/dev/null; then
+    bash -c "$(curl -fsSL https://get.volta.sh)" -- --skip-setup
+  else
+    echo "volta is already installed"
+  fi
 
-  echo_task "Installing node"
-  nvm install 'lts/*' --latest-npm --reinstall-packages-from=current
-  nvm alias default 'lts/*'
+  echo_task "Installing node, npm, and yarn"
+  volta install node npm yarn
 
   echo_task "Installing sdk"
   if ! sdk version &>/dev/null; then
@@ -171,11 +214,17 @@ if ! is_devcontainer; then
     echo "sdk is already installed"
   fi
 
-  echo_task "Installing Java 8"
+  echo_task "Installing Java"
+  (
+    set +o pipefail
+    yes | sdk install java
+  )
+
+  # Install latest Java 8
   # get the identifier for java 8
-  identifier="$(sdk ls java | grep -m 1 -o ' 8.*.hs-adpt ' | awk '{print $NF}')"
-  sdk i java "$identifier"
-  unset identifier
+  # identifier="$(sdk ls java | grep -m 1 -o ' 8.*.hs-adpt ' | awk '{print $NF}')"
+  # sdk i java "$identifier"
+  # unset identifier
 
   if is_wsl; then
     echo_task "Performing WSL specific steps"
@@ -192,8 +241,14 @@ if ! is_devcontainer; then
 
     echo_task "Setting up Git credential helper"
     sudo git config --system credential.helper "/mnt/c/Program\ Files/Git/mingw64/libexec/git-core/git-credential-manager.exe"
+
   elif is_gnome; then
     echo_task "Performing GNOME specific steps"
+
+    echo_task "Installing and setting up Fira Code Nerd Font"
+    curl -fsSL --create-dirs -o "$HOME/.local/share/fonts/Fira Code Regular Nerd Font Complete.ttf" \
+      "https://github.com/ryanoasis/nerd-fonts/raw/master/patched-fonts/FiraCode/Regular/complete/Fira%20Code%20Regular%20Nerd%20Font%20Complete.ttf"
+    gsettings set org.gnome.desktop.interface monospace-font-name 'FiraCode Nerd Font 13'
 
     echo_task "Setting up Git credential helper"
     sudo apt install -y libsecret-1-0 libsecret-1-dev
