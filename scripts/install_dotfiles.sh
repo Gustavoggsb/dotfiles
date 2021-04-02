@@ -25,9 +25,10 @@ git_clean() {
   unset git
 }
 
-DOTFILES_USER=${DOTFILES_USER:-gustavoggsb}
+DOTFILES_REPO_HOST=${DOTFILES_REPO_HOST:-"https://github.com"}
+DOTFILES_USER=${DOTFILES_USER:-"gustavoggsb"}
 DOTFILES_REPO="https://github.com/$DOTFILES_USER/dotfiles"
-DOTFILES_BRANCH=${DOTFILES_BRANCH:-master}
+DOTFILES_BRANCH=${DOTFILES_BRANCH:-"master"}
 DOTFILES_DIR="$HOME/.dotfiles"
 
 if [ ! "$(command -v git)" ]; then

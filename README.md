@@ -4,66 +4,105 @@
 
 Bootstrap your Ubuntu in a few minutes!
 
+![Hello dotfiles! image](https://user-images.githubusercontent.com/29582865/112045407-95518600-8b29-11eb-8218-128fd2e9805a.png)
+
 This dotfiles repository is currently aimed for [**Ubuntu on WSL**](https://ubuntu.com/wsl), **Ubuntu Server**, and **Ubuntu Desktop**, tested with **Ubuntu 20.04**. See how to get started with WSL [here](https://docs.microsoft.com/pt-br/windows/wsl/install-win10). It's also suitable for use in [**GitHub Codespaces**](https://github.com/features/codespaces) and [**VS Code Remote - Containers**](https://code.visualstudio.com/docs/remote/containers).
 
 This repository is managed with [`chezmoi`](https://chezmoi.io).
 
-## Summary <!-- omit in toc -->
+## Table of contents <!-- omit in toc -->
 
 - [Get started](#get-started)
-  - [Using the convenience script](#using-the-convenience-script)
-    - [Usage](#usage)
-    - [Examples](#examples)
-  - [Manually](#manually)
+  - [1. Setup the font](#1-setup-the-font)
+  - [2. Install the dotfiles](#2-install-the-dotfiles)
+  - [Convenience script](#convenience-script)
+  - [Install the dotfiles manually](#install-the-dotfiles-manually)
 - [Forking guide](#forking-guide)
 - [`scripts/`](#scripts)
   - [`create_alternative_chrome_shortcut.sh`](#create_alternative_chrome_shortcutsh)
-    - [Usage](#usage-1)
-    - [Examples](#examples-1)
+    - [Usage](#usage)
+    - [Examples](#examples)
     - [Demo](#demo)
+
+---
 
 ## Get started
 
-The current state of this dotfiles uses the zsh theme [Powerlevel10k](https://github.com/romkatv/powerlevel10k), so it requires you to install a font on your host machine with support for [Nerd Fonts](https://github.com/ryanoasis/nerd-fonts). Currently I use `FiraCode NF`, and you can install it on Windows with [Chocolatey](https://chocolatey.org/install):
+The current state of this dotfiles uses the zsh theme [Powerlevel10k](https://github.com/romkatv/powerlevel10k), so it requires you to install a font on your host machine with support for [Nerd Fonts](https://github.com/ryanoasis/nerd-fonts). Currently I use `FiraCode Nerd Font`. You have to:
 
-```powershell
-choco install firacodenf
-```
+### 1. Setup the font
 
-Now you will learn how to bootstrap this repository on your machine.
+In Ubuntu Desktop, the dotfiles installation will take care of installing the font and set it up in GNOME Terminal. On Windows, you can install it with the following steps:
 
-### Using the convenience script
+1. [Download it by clicking here](https://github.com/ryanoasis/nerd-fonts/raw/master/patched-fonts/FiraCode/Regular/complete/Fira%20Code%20Regular%20Nerd%20Font%20Complete.ttf).
+2. Open it and click in _Install_.
 
-You can use the [convenience script](./clone_and_install.sh) with, it will install Git in case you don't have it already:
+Once you have it installed, you have to configure your terminal applications to use it. **To configure VS Code**:
+
+> 💡 You need to restart both VS Code or Windows Terminal after installing the font before using it.
+
+1. On VS Code, press `Ctrl`+`,` to open the settings.
+2. Search for "Terminal Font Family", and write `FiraCode Nerd Font` in the entry named _Terminal › Integrated: Font Family_. Like below:
+
+   ![VS Code font configuration](https://user-images.githubusercontent.com/29582865/112052025-5cb5aa80-8b31-11eb-8e85-a4eb9e1a09a8.png)
+
+**To configure Windows Terminal**:
+
+1. On Windows Terminal, press `Ctrl`+`,` to open the settings. It will open a `json` file in your text editor.
+2. Insert a new `fontFace` key under `profiles.defaults` with the value `FiraCode Nerd Font`, something like:
+
+   ```json
+   {
+     "profiles": {
+       "defaults": {
+         // Put settings here that you want to apply to all profiles.
+         "fontFace": "FiraCode Nerd Font"
+       }
+     }
+   }
+   ```
+
+**Now you are ready to install the dotfiles.**
+
+### 2. Install the dotfiles
+
+You can use the [convenience script](./clone_and_install.sh) to install the dotfiles pretty quickly, and it will install Git in case you don't have it already:
 
 ```bash
 sh -c "$(wget -qO- https://raw.githubusercontent.com/gustavoggsb/dotfiles/master/scripts/install_dotfiles.sh)"
 ```
 
-> 💡 We use `wget` here because not all systems comes with `curl` installed. But the `curl` version of it is:
+> 💡 We use `wget` here because it comes preinstalled with most of the Ubuntu versions. But you can also use `curl`:
 >
 > ```bash
 >  sh -c "$(curl -fsSL https://raw.githubusercontent.com/gustavoggsb/dotfiles/master/scripts/install_dotfiles.sh)"
 > ```
 
-#### Usage
+**If you followed these steps so far, that means you finished installing the dotfiles already. Have fun!**
 
-The convenience script supports two environment variables:
+---
 
+- `DOTFILES_REPO_HOST`: Default to `https://github.com`.
 - `DOTFILES_REPO`: Default to `gustavoggsb`.
 - `DOTFILES_BRANCH`: Default to `master`.
 
-#### Examples
+The previous step used the [convenience script](./clone_and_install.sh) to install this dotfiles. There are some extra options that you can use to tweak the installation if you need.
 
-- Using the convenience script to clone the dotfiles repository on branch `beta`:
+The convenience script supports some environment variables:
 
   ```bash
   DOTFILES_BRANCH=beta sh -c "$(wget -qO- https://raw.githubusercontent.com/gustavoggsb/dotfiles/master/scripts/install_dotfiles.sh)"
   ```
 
-### Manually
+For example, you can clone use it to clone the dotfiles repository on branch `beta` with:
 
-You can also do it manually, it's simple after all.
+```bash
+DOTFILES_BRANCH=beta sh -c "$(wget -qO- https://git.io/gustavoggsb-dotfiles)"
+```
+
+### Install the dotfiles manually
+
+If you prefer not to use the convenience script to install the dotfiles, you can also do it manually:
 
 ```bash
 git clone https://github.com/gustavoggsb/dotfiles "$HOME/.dotfiles"
@@ -83,9 +122,13 @@ If you are forking this repository, you'll have to edit the following areas:
 
 Where `<your-username>` is your GitHub username or organization name.
 
+---
+
 ## [`scripts/`](scripts/)
 
-If you already have this repository [bootstrapped](#get-started) in your machine, you can use the scripts right away. Or, if you want to run it directly, you can use:
+There are some scripts here to help you automate tricky activities when setting up your computer.
+
+If you already have this dotfiles [installed](#get-started), you can use the scripts right away. Or, if you want to run it without installing the dotfiles, you can use something like:
 
 ```bash
 bash -c "$(curl -fsSL "https://raw.githubusercontent.com/gustavoggsb/dotfiles/master/scripts/<script-name>")" -- <arguments>
